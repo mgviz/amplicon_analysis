@@ -6,6 +6,7 @@ import time
 import logging as log
 import pandas as pd
 import matplotlib
+
 matplotlib.use('Agg')  # non-interactive backend
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -125,6 +126,10 @@ def cov_plot(df, out_folder, cov_threshold=None, feats=None, samps=None):
         features = feats
 
     for feature in features:
+
+        fig = plt.figure()
+        ax1 = fig.add_subplot(111)
+
         df_feature = df[df['feature'] == feature]
 
         if not samps:
@@ -137,27 +142,52 @@ def cov_plot(df, out_folder, cov_threshold=None, feats=None, samps=None):
         # Plotting a line for each sample
         for sample in samples:
             sample_data = df_feature[df_feature['sample'] == sample]
-            plt.plot(sample_data['base'], sample_data['coverage'],
+            ax1.plot(sample_data['base'], sample_data['coverage'],
                      color='black', alpha=0.5)
 
             # Setting plot limits
-            plt.ylim(0, df_feature['coverage'].max() + 50)
-            plt.xlim(0, df_feature['base'].max() + 1)
+            ax1.set_ylim(0, df_feature['coverage'].max() + 50)
+            ax1.set_xlim(0, df_feature['base'].max() + 1)
 
             # Plotting coverage threshold
             if cov_threshold:
-                plt.hlines(y=cov_threshold, xmin=plt.xlim()[0],
-                           xmax=plt.xlim()[1], color='r')
+                ax1.hlines(y=cov_threshold, xmin=ax1.get_xlim()[0],
+                           xmax=ax1.get_xlim()[1], color='r')
+
+                # Checking if there are intersections with the cov threshold
+                below = sample_data[sample_data['coverage'] < cov_threshold]
+                above = sample_data[sample_data['coverage'] > cov_threshold]
+                if (not below.empty) and (not above.empty):
+                    # Getting intersections
+                    intersections = []
+                    x = sample_data['coverage'].tolist()
+                    for i, couple in enumerate(zip(x[0:], x[1:])):
+                        if couple[0] < cov_threshold <= couple[1]:
+                            point = sample_data.iloc[[i+1]]['base'].values[0]
+                            intersections.append(point)
+                        if couple[0] >= cov_threshold > couple[1]:
+                            point = sample_data.iloc[[i]]['base'].values[0]
+                            intersections.append(point)
+
+                    if intersections:
+                        ax2 = ax1.twiny()
+                        ax2.set_xlim(ax1.get_xlim())
+                        ax2.set_ylim(ax1.get_ylim())
+                        ax2.vlines(x=intersections, ymin=cov_threshold,
+                                   ymax=ax2.get_ylim()[1], color='black',
+                                   linestyle='--')
+                        ax2.grid(b=False)
+                        ax2.set_xticks(intersections)
 
             # Customizing labels
-            plt.title(feature)
-            plt.xlabel('Position (bp)')
-            plt.ylabel('Coverage')
+            fig.suptitle(feature)
+            ax1.set_xlabel('Position (bp)')
+            ax1.set_ylabel('Coverage')
 
             # Saving plot and clearing it
             figname = sample + '-' + feature + '.pbcov.png'
-            plt.savefig(os.path.join(out_folder, figname))
-            plt.close()
+            fig.savefig(os.path.join(out_folder, figname))
+            plt.clf()
 
 
 def percentage(part, whole):
@@ -186,9 +216,9 @@ def _get_cov_stats(df, out_fpath, cov_threshold=None):
     if cov_threshold:
         col_name = '%cov_breadth_' + str(cov_threshold) + 'x'
         stats[col_name] = df_grouped.agg([lambda x: percentage(
-                                np.size(np.where(x > cov_threshold)),
-                                np.size(x))
-                              ]).reset_index().iloc[:, -1].values
+                np.size(np.where(x > cov_threshold)),
+                np.size(x))
+                                          ]).reset_index().iloc[:, -1].values
 
     # Writing to excel
     # http://xlsxwriter.readthedocs.org/working_with_pandas.html

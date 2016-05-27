@@ -271,19 +271,20 @@ def _create_folder(folder):
             raise IOError('Unable to create output folders. Check permissions')
 
 
-def run_bedtools_get_cov(inds, bam_path, bed_path, cov_path, cmd):
+def run_bedtools_get_cov(samples, bam_out_fpath, bed_out_fpath, cov_out_fpath,
+                         cmd):
     """Runs a bedtools getCoverage command
-    :param inds: names of the samples
-    :param bam_path: path of the input BAM file
-    :param bed_path: path of the input BED file
-    :param cov_path: path of the output coverage file
+    :param samples: names of the samples
+    :param bam_out_fpath: path of the input BAM file
+    :param bed_out_fpath: path of the input BED file
+    :param cov_out_fpath: path of the output coverage file
     :param cmd: template of the command
     """
     template = Template(cmd)
-    for ind in inds:
-        bam = os.path.join(bam_path, ind + '.bam')
-        bed = os.path.join(bed_path, ind + '.bed')
-        out = os.path.join(cov_path, ind + '.pbcov')
+    for sample in samples:
+        bam = os.path.join(bam_out_fpath, sample + '.bam')
+        bed = os.path.join(bed_out_fpath, sample + '.bed')
+        out = os.path.join(cov_out_fpath, sample + '.pbcov')
         cmd = template.substitute(bam=bam, bed=bed, out=out)
         p = Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE)
         output = p.communicate()[1]
@@ -358,6 +359,7 @@ def main():
                          str(samples_without_bam) + '"')
 
     # Creating a BED file for each desired sample
+    log.info('Creating BED files...')
     sample_data_df = pd.read_csv(options.sample_data_fpath, sep='\t', header=0)
     desired_columns = ['chromosome', 'amplicon_start', 'amplicon_end',
                        'amplicon_name']
@@ -366,28 +368,31 @@ def main():
             sample_data_df.sample_name == sample)]
         bed_fname = os.path.splitext(bam_samples[i])[0] + '.bed'
         bed_fpath = os.path.join(out_folders['bed_folder'], bed_fname)
-
         if os.path.isfile(bed_fpath):
             log.warning('File "' + bed_fpath + '" already exists. Overwriting')
-
         subselect.to_csv(bed_fpath, sep='\t', index=False, header=False)
 
     # Running BEDtools
     log.info('Running BEDtools...')
     inds = map(lambda x: os.path.splitext(x)[0], bam_samples)
-    run_bedtools_get_cov(inds, out_folders['bam_folder'], out_folders['bed_folder'], out_folders['cov_folder'],
+    run_bedtools_get_cov(inds, out_folders['bam_folder'],
+                         out_folders['bed_folder'], out_folders['cov_folder'],
                          _BEDTOOLS_COVPERBASE_CMD)
 
     # Merging cov files
     log.info('Merging individual coverage files...')
-    cov_files = [f for f in os.listdir(out_folders['cov_folder']) if f.endswith('.pbcov')]
+    cov_files = [f for f in os.listdir(out_folders['cov_folder']) if
+                 f.endswith('.pbcov')]
     log.debug('Coverage files found: "' + str(cov_files) + '"')
-    cov_abspath = map(lambda x: os.path.join(out_folders['cov_folder'], x), cov_files)
-    concatenate_files(cov_abspath, os.path.join(out_folders['cov_folder'], _MERGED_COV_FILE))
+    cov_abspath = map(lambda x: os.path.join(out_folders['cov_folder'], x),
+                      cov_files)
+    concatenate_files(cov_abspath,
+                      os.path.join(out_folders['cov_folder'], _MERGED_COV_FILE))
 
     # Parsing input file
     log.info('Reading coverage file...')
-    df = parse_cov_file(os.path.join(out_folders['cov_folder'], _MERGED_COV_FILE))
+    df = parse_cov_file(
+            os.path.join(out_folders['cov_folder'], _MERGED_COV_FILE))
 
     # Plotting
     log.info('Generating coverage plots...')

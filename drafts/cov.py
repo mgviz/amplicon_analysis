@@ -18,11 +18,14 @@ _DEF_COV_THRESHOLD = 100
 _DATA_FOLDER = 'data'
 _SAMPLE_DATA = 'SampleData.csv'
 _SAMPLE_SELECTION = 'SampleSelection.csv'
+
+# Output folders
 _ALIGNMENT_FOLDER = 'Alignment'
 _COV_FOLDER = 'covs'
 _PLOT_FOLDER = 'plots'
 _REPORT_FOLDER = 'reports'
 _BED_FOLDER = 'beds'
+
 _MERGED_COV_FILE = 'all_samples.perbase.cov'
 
 # Required BEDtools v.2.19.0 or above!
@@ -163,7 +166,7 @@ def cov_plot(df, out_folder, cov_threshold=None, feats=None, samps=None):
                     x = sample_data['coverage'].tolist()
                     for i, couple in enumerate(zip(x[0:], x[1:])):
                         if couple[0] < cov_threshold <= couple[1]:
-                            point = sample_data.iloc[[i+1]]['base'].values[0]
+                            point = sample_data.iloc[[i + 1]]['base'].values[0]
                             intersections.append(point)
                         if couple[0] >= cov_threshold > couple[1]:
                             point = sample_data.iloc[[i]]['base'].values[0]
@@ -217,8 +220,7 @@ def _get_cov_stats(df, out_fpath, cov_threshold=None):
         col_name = '%cov_breadth_' + str(cov_threshold) + 'x'
         stats[col_name] = df_grouped.agg([lambda x: percentage(
                 np.size(np.where(x > cov_threshold)),
-                np.size(x))
-                                          ]).reset_index().iloc[:, -1].values
+                np.size(x))]).reset_index().iloc[:, -1].values
 
     # Writing to excel
     # http://xlsxwriter.readthedocs.org/working_with_pandas.html
@@ -255,8 +257,8 @@ def _get_cov_stats(df, out_fpath, cov_threshold=None):
     writer.save()
 
 
-def create_folder(folder):
-    """Creates a new folder given a name and a parent directory
+def _create_folder(folder):
+    """Creates a new folder given a path
     :param folder: path of the folder
     """
     if os.path.exists(folder):
@@ -318,41 +320,41 @@ def main():
         log.info('START "' + _get_time() + '"')
         log.debug('Options parsed: "' + str(options) + '"')
 
-    # Setting up output folder paths
-    bam_folder = os.path.join(options.project_fpath, _ALIGNMENT_FOLDER)
-    bed_folder = os.path.join(options.project_fpath, _BED_FOLDER)
-    cov_folder = os.path.join(options.project_fpath, _COV_FOLDER)
-    plot_folder = os.path.join(options.project_fpath, _PLOT_FOLDER)
-    report_folder = os.path.join(options.project_fpath, _REPORT_FOLDER)
+    # Setting up output folders paths
+    out_folders = {
+        'bam_folder': os.path.join(options.project_fpath, _ALIGNMENT_FOLDER),
+        'bed_folder': os.path.join(options.project_fpath, _BED_FOLDER),
+        'cov_folder': os.path.join(options.project_fpath, _COV_FOLDER),
+        'plot_folder': os.path.join(options.project_fpath, _PLOT_FOLDER),
+        'report_folder': os.path.join(options.project_fpath, _REPORT_FOLDER)}
 
     # Creating output folders
     log.info('Creating output folders...')
-    create_folder(bam_folder)
-    create_folder(bed_folder)
-    create_folder(cov_folder)
-    create_folder(plot_folder)
-    create_folder(report_folder)
+    for value in out_folders.values():
+        _create_folder(value)
 
     # Retrieving desired sample names
     sample_selec_fhand = open(options.sample_selec_fpath, 'r')
     samples = [sample.strip() for sample in sample_selec_fhand]
+    sample_selec_fhand.close()
     log.debug('Samples specified: "' + str(samples) + '"')
 
     # Checking if there is a BAM file for each specified sample
     # Also creating a ordered BAM file list depending on samples list order
-    bam_files = [f for f in os.listdir(bam_folder) if f.endswith('.bam')]
+    bam_files = [f for f in os.listdir(out_folders['bam_folder']) if
+                 f.endswith('.bam')]
     log.debug('BAM files found: "' + str(bam_files) + '"')
     samples_with_bam = []
-    bam_ordered = []
+    bam_samples = []
     for sample in samples:
         for bam in bam_files:
             if bam.startswith(sample):
                 samples_with_bam.append(sample)
-                bam_ordered.append(bam)
+                bam_samples.append(bam)
                 break
     samples_without_bam = list(set(samples) - set(samples_with_bam))
     if len(samples_without_bam) != 0:
-        raise ValueError('No BAM file for samples: "' +
+        raise ValueError('No BAM files for samples: "' +
                          str(samples_without_bam) + '"')
 
     # Creating a BED file for each desired sample
@@ -360,10 +362,10 @@ def main():
     desired_columns = ['chromosome', 'amplicon_start', 'amplicon_end',
                        'amplicon_name']
     for i, sample in enumerate(samples):
-        subselect = sample_data_df[desired_columns][(sample_data_df.sample_ID ==
-                                                     sample)]
-        bed_fname = os.path.splitext(bam_ordered[i])[0] + '.bed'
-        bed_fpath = os.path.join(bed_folder, bed_fname)
+        subselect = sample_data_df[desired_columns][(
+            sample_data_df.sample_name == sample)]
+        bed_fname = os.path.splitext(bam_samples[i])[0] + '.bed'
+        bed_fpath = os.path.join(out_folders['bed_folder'], bed_fname)
 
         if os.path.isfile(bed_fpath):
             log.warning('File "' + bed_fpath + '" already exists. Overwriting')
@@ -372,27 +374,27 @@ def main():
 
     # Running BEDtools
     log.info('Running BEDtools...')
-    inds = map(lambda x: os.path.splitext(x)[0], bam_ordered)
-    run_bedtools_get_cov(inds, bam_folder, bed_folder, cov_folder,
+    inds = map(lambda x: os.path.splitext(x)[0], bam_samples)
+    run_bedtools_get_cov(inds, out_folders['bam_folder'], out_folders['bed_folder'], out_folders['cov_folder'],
                          _BEDTOOLS_COVPERBASE_CMD)
 
     # Merging cov files
     log.info('Merging individual coverage files...')
-    cov_files = [f for f in os.listdir(cov_folder) if f.endswith('.pbcov')]
+    cov_files = [f for f in os.listdir(out_folders['cov_folder']) if f.endswith('.pbcov')]
     log.debug('Coverage files found: "' + str(cov_files) + '"')
-    cov_abspath = map(lambda x: os.path.join(cov_folder, x), cov_files)
-    concatenate_files(cov_abspath, os.path.join(cov_folder, _MERGED_COV_FILE))
+    cov_abspath = map(lambda x: os.path.join(out_folders['cov_folder'], x), cov_files)
+    concatenate_files(cov_abspath, os.path.join(out_folders['cov_folder'], _MERGED_COV_FILE))
 
     # Parsing input file
     log.info('Reading coverage file...')
-    df = parse_cov_file(os.path.join(cov_folder, _MERGED_COV_FILE))
+    df = parse_cov_file(os.path.join(out_folders['cov_folder'], _MERGED_COV_FILE))
 
     # Plotting
     log.info('Generating coverage plots...')
-    cov_plot(df, plot_folder, options.cov_threshold)
+    cov_plot(df, out_folders['plot_folder'], options.cov_threshold)
 
     # Creating excel with statistics
-    _get_cov_stats(df, report_folder, options.cov_threshold)
+    _get_cov_stats(df, out_folders['report_folder'], options.cov_threshold)
 
     if options.verbosity:
         log.info('END "' + _get_time() + '"')

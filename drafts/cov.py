@@ -75,14 +75,14 @@ def _get_options():
         args.sample_selec_fpath = os.path.join(data_fpath, _SAMPLE_SELECTION)
         if not os.path.isfile(args.sample_data_fpath):
             raise IOError('SampleData file does not exist in "' +
-                          data_fpath + '"')
+                          data_fpath + '".')
         if not os.path.isfile(args.sample_selec_fpath):
             raise IOError('SampleSelection file does not exist in "' +
-                          data_fpath + '"')
+                          data_fpath + '".')
 
     # Checking if coverage threshold is a positive integer
     if (not isinstance(args.cov_threshold, int)) or args.cov_threshold < 0:
-        raise IOError('Coverage threshold must be a positive integer')
+        raise IOError('Coverage threshold must be a positive integer.')
 
     return args
 
@@ -108,7 +108,7 @@ def parse_cov_file(fpath, sep='\t'):
     try:
         assert (len(header) == len(df.columns))
     except AssertionError:
-        log.error('File "' + fpath + '" has an incorrect number of columns')
+        log.error('File "' + fpath + '" has an incorrect number of columns.')
 
     df.columns = header
 
@@ -274,13 +274,13 @@ def _create_folder(folder):
     :param folder: path of the folder
     """
     if os.path.exists(folder):
-        log.warning('Folder "' + folder + '" already exists')
+        log.warning('Folder "' + folder + '" already exists.')
     else:
         try:
             os.makedirs(folder)
-            log.debug('Creating folder "' + folder + '"')
+            log.debug('Creating folder "' + folder + '".')
         except:
-            raise IOError('Unable to create output folders. Check permissions')
+            raise IOError('Unable to create output folders. Check permissions.')
 
 
 def run_bedtools_get_cov(samples, bam_out_fpath, bed_out_fpath, cov_out_fpath,
@@ -330,8 +330,8 @@ def main():
     # Parsing options
     options = _get_options()
     if options.verbosity:
-        log.info('START "' + _get_time() + '"')
-        log.debug('Options parsed: "' + str(options) + '"')
+        log.info('START "' + _get_time() + '".')
+        log.debug('Options parsed: "' + str(options) + '".')
 
     # Setting up output folders paths
     out_folders = {
@@ -349,14 +349,15 @@ def main():
     # Retrieving desired sample names
     sample_selec_fhand = open(options.sample_selec_fpath, 'r')
     samples = [sample.strip() for sample in sample_selec_fhand]
+    samples = filter(None, samples)  # Removing empty lines
     sample_selec_fhand.close()
-    log.debug('Samples specified: "' + str(samples) + '"')
+    log.debug('Samples specified: "' + str(samples) + '".')
 
     # Checking if there is a BAM file for each specified sample
     # Also creating a ordered BAM file list depending on samples list order
     bam_files = [f for f in os.listdir(out_folders['bam_folder']) if
                  f.endswith('.bam')]
-    log.debug('BAM files found: "' + str(bam_files) + '"')
+    log.debug('BAM files found: "' + str(bam_files) + '".')
     samples_with_bam = []
     bam_samples = []
     for sample in samples:
@@ -368,7 +369,7 @@ def main():
     samples_without_bam = list(set(samples) - set(samples_with_bam))
     if len(samples_without_bam) != 0:
         raise ValueError('No BAM files for samples: "' +
-                         str(samples_without_bam) + '"')
+                         str(samples_without_bam) + '".')
 
     # Creating a BED file for each desired sample
     log.info('Creating BED files...')
@@ -378,10 +379,34 @@ def main():
     for i, sample in enumerate(samples):
         subselect = sample_data_df[desired_columns][(
             sample_data_df.sample_name == sample)]
+
+        #
+        if subselect.empty:
+            msg = ('No region found for sample "' + sample +
+                   '" in SampleData.csv.')
+            raise ValueError(msg)
+
+        # Checking if region end is higher than region start
+        wrong_regions = subselect.loc[subselect['amplicon_end'] -
+                                      subselect['amplicon_start'] <= 0]
+        if not wrong_regions.empty:
+            msg = 'Region end has to be higher than region start:\n' +\
+                  str(wrong_regions)
+            raise ValueError(msg)
+
+
+
+        #print list(subselect['amplicon_end'].values) - list(subselect['amplicon_start'].values)
+
+        #print subselect['amplicon_end'].values.toList() - subselect['amplicon_start'].values.toList() <= 0
+        #if subselect['amplicon_end'] - subselect['amplicon_start'] <= 0:
+        #    raise ValueError('Region error in sample "' + sample +
+        #                     '": Region end has to be higher than region start')
+
         bed_fname = os.path.splitext(bam_samples[i])[0] + '.bed'
         bed_fpath = os.path.join(out_folders['bed_folder'], bed_fname)
         if os.path.isfile(bed_fpath):
-            log.warning('File "' + bed_fpath + '" already exists. Overwriting')
+            log.warning('File "' + bed_fpath + '" already exists. Overwriting.')
         subselect.to_csv(bed_fpath, sep='\t', index=False, header=False)
 
     # Running BEDtools
@@ -395,7 +420,7 @@ def main():
     log.info('Generating coverage plots...')
     cov_fnames = [f for f in os.listdir(out_folders['cov_folder']) if
                  f.endswith('.pbcov')]
-    log.debug('Coverage files found: "' + str(cov_fnames) + '"')
+    log.debug('Coverage files found: "' + str(cov_fnames) + '".')
     stats_all = pd.DataFrame()
     for cov_fname in cov_fnames:
         # Parsing input file
@@ -412,7 +437,7 @@ def main():
                           options.cov_threshold)
 
     if options.verbosity:
-        log.info('END "' + _get_time() + '"')
+        log.info('END "' + _get_time() + '".')
 
 
 if __name__ == '__main__':

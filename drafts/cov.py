@@ -102,6 +102,7 @@ def parse_cov_file(fpath, sep='\t'):
     """
     header = ['ref', 'start', 'end', 'feature', 'base', 'coverage', 'sample']
     df = pd.read_csv(fpath, sep=sep, header=None)
+    df['sample'] = os.path.splitext(os.path.basename(fpath))[0]
 
     # Checking that header and dataframe columns coincide in number
     try:
@@ -205,9 +206,8 @@ def percentage(part, whole):
         return -1
 
 
-def _get_cov_stats(df, out_fpath, cov_threshold=None):
-    """Writes an excel file with some stats for each sample and feature"""
-
+def _get_cov_stats(df, cov_threshold=None):
+    """Gets stats from a coverage dataframe"""
     # Summarizing data
     # http://bconnelly.net/2013/10/summarizing-data-in-python-with-pandas/
     df_cov = df.get(['sample', 'feature', 'coverage'])
@@ -221,6 +221,18 @@ def _get_cov_stats(df, out_fpath, cov_threshold=None):
         stats[col_name] = df_grouped.agg([lambda x: percentage(
                 np.size(np.where(x > cov_threshold)),
                 np.size(x))]).reset_index().iloc[:, -1].values
+
+    return stats
+
+
+def _write_stats_to_excel(stats, out_fpath, cov_threshold=None):
+    """Write coverage stats to an excel file"""
+    # Ordering columns
+    if cov_threshold:
+        stats = stats[['sample', 'feature', 'min', 'max', '%cov_breadth_' +
+                       str(cov_threshold) + 'x']]
+    else:
+        stats = stats[['sample', 'feature', 'min', 'max']]
 
     # Writing to excel
     # http://xlsxwriter.readthedocs.org/working_with_pandas.html
@@ -379,27 +391,25 @@ def main():
                          out_folders['bed_folder'], out_folders['cov_folder'],
                          _BEDTOOLS_COVPERBASE_CMD)
 
-    # Merging cov files
-    log.info('Merging individual coverage files...')
-    cov_files = [f for f in os.listdir(out_folders['cov_folder']) if
-                 f.endswith('.pbcov')]
-    log.debug('Coverage files found: "' + str(cov_files) + '"')
-    cov_abspath = map(lambda x: os.path.join(out_folders['cov_folder'], x),
-                      cov_files)
-    concatenate_files(cov_abspath,
-                      os.path.join(out_folders['cov_folder'], _MERGED_COV_FILE))
-
-    # Parsing input file
-    log.info('Reading coverage file...')
-    df = parse_cov_file(
-            os.path.join(out_folders['cov_folder'], _MERGED_COV_FILE))
-
-    # Plotting
+    # Creating coverage plots and getting stats
     log.info('Generating coverage plots...')
-    cov_plot(df, out_folders['plot_folder'], options.cov_threshold)
+    cov_fnames = [f for f in os.listdir(out_folders['cov_folder']) if
+                 f.endswith('.pbcov')]
+    log.debug('Coverage files found: "' + str(cov_fnames) + '"')
+    stats_all = pd.DataFrame()
+    for cov_fname in cov_fnames:
+        # Parsing input file
+        cov_fpath = os.path.join(out_folders['cov_folder'], cov_fname)
+        df = parse_cov_file(cov_fpath)
+        # Plotting
+        cov_plot(df, out_folders['plot_folder'], options.cov_threshold)
+
+        stats = _get_cov_stats(df, options.cov_threshold)
+        stats_all = stats_all.append(stats)
 
     # Creating excel with statistics
-    _get_cov_stats(df, out_folders['report_folder'], options.cov_threshold)
+    _write_stats_to_excel(stats_all, out_folders['report_folder'],
+                          options.cov_threshold)
 
     if options.verbosity:
         log.info('END "' + _get_time() + '"')

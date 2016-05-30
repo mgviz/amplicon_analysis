@@ -212,8 +212,8 @@ def _get_cov_stats(df, cov_threshold=None):
     # http://bconnelly.net/2013/10/summarizing-data-in-python-with-pandas/
     df_cov = df.get(['sample', 'feature', 'coverage'])
     df_grouped = df_cov.groupby(['sample', 'feature'])
-    stats = df_grouped.agg([np.min, np.max]).reset_index()
-    stats.columns = ['sample', 'feature', 'min', 'max']
+    stats = df_grouped.agg([np.size, np.min, np.max]).reset_index()
+    stats.columns = ['sample', 'feature', 'length', 'cov_min', 'cov_max']
 
     # If there is coverage threshold, add coverage breadth
     if cov_threshold:
@@ -229,10 +229,10 @@ def _write_stats_to_excel(stats, out_fpath, cov_threshold=None):
     """Write coverage stats to an excel file"""
     # Ordering columns
     if cov_threshold:
-        stats = stats[['sample', 'feature', 'min', 'max', '%cov_breadth_' +
-                       str(cov_threshold) + 'x']]
+        stats = stats[['sample', 'feature', 'length', 'cov_min', 'cov_max',
+                       '%cov_breadth_' + str(cov_threshold) + 'x']]
     else:
-        stats = stats[['sample', 'feature', 'min', 'max']]
+        stats = stats[['sample', 'feature', 'length', 'cov_min', 'cov_max']]
 
     # Writing to excel
     # http://xlsxwriter.readthedocs.org/working_with_pandas.html
@@ -251,7 +251,7 @@ def _write_stats_to_excel(stats, out_fpath, cov_threshold=None):
         orange_format = workbook.add_format({'bg_color': '#FFD27F'})
 
         # Applying formats to cell range
-        cell_range = 'E2:E' + str(len(stats.index) + 1)
+        cell_range = 'F2:F' + str(len(stats.index) + 1)
         worksheet.conditional_format(cell_range, {'type': 'cell',
                                                   'criteria': 'equal to',
                                                   'value': 100,

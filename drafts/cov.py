@@ -380,7 +380,7 @@ def main():
         subselect = sample_data_df[desired_columns][(
             sample_data_df.sample_name == sample)]
 
-        #
+        # Checking if there are regions associated to sample
         if subselect.empty:
             msg = ('No region found for sample "' + sample +
                    '" in SampleData.csv.')
@@ -393,15 +393,6 @@ def main():
             msg = 'Region end has to be higher than region start:\n' +\
                   str(wrong_regions)
             raise ValueError(msg)
-
-
-
-        #print list(subselect['amplicon_end'].values) - list(subselect['amplicon_start'].values)
-
-        #print subselect['amplicon_end'].values.toList() - subselect['amplicon_start'].values.toList() <= 0
-        #if subselect['amplicon_end'] - subselect['amplicon_start'] <= 0:
-        #    raise ValueError('Region error in sample "' + sample +
-        #                     '": Region end has to be higher than region start')
 
         bed_fname = os.path.splitext(bam_samples[i])[0] + '.bed'
         bed_fpath = os.path.join(out_folders['bed_folder'], bed_fname)

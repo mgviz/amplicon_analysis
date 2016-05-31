@@ -362,7 +362,7 @@ def main():
     bam_samples = []
     for sample in samples:
         for bam in bam_files:
-            if bam.startswith(sample):
+            if bam.startswith(sample + '_S'):
                 samples_with_bam.append(sample)
                 bam_samples.append(bam)
                 break

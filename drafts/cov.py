@@ -6,7 +6,6 @@ import time
 import logging as log
 import pandas as pd
 import matplotlib
-
 matplotlib.use('Agg')  # non-interactive backend
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -191,7 +190,8 @@ def cov_plot(df, out_folder, cov_threshold=None, feats=None, samps=None):
             # Saving plot and clearing it
             figname = sample + '-' + feature + '.pbcov.png'
             fig.savefig(os.path.join(out_folder, figname))
-            plt.clf()
+            #plt.clf()
+            plt.close(fig)
 
 
 def percentage(part, whole):

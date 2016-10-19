@@ -28,7 +28,7 @@ _BED_FOLDER = 'beds'
 _MERGED_COV_FILE = 'all_samples.perbase.cov'
 
 # Required BEDtools v.2.19.0 or above!
-_BEDTOOLS_COVPERBASE_CMD = ('coverageBed -d -a $bed -b $bam' +
+_BEDTOOLS_COVPERBASE_CMD = ('coverageBed -F 0.8 -d -a $bed -b $bam' +
                             ' | grep -v \'^all\' > $out')
 
 
@@ -379,6 +379,7 @@ def main():
     for i, sample in enumerate(samples):
         subselect = sample_data_df[desired_columns][(
             sample_data_df.sample_name == sample)]
+        subselect['amplicon_start'] -= 1  # From 1-based to 0-based coordinates
 
         # Checking if there are regions associated to sample
         if subselect.empty:

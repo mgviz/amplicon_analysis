@@ -28,7 +28,7 @@ _BED_FOLDER = 'beds'
 _MERGED_COV_FILE = 'all_samples.perbase.cov'
 
 # Required BEDtools v.2.19.0 or above!
-_BEDTOOLS_COVPERBASE_CMD = ('coverageBed -F 0.8 -d -a $bed -b $bam' +
+_BEDTOOLS_COVPERBASE_CMD = ('coverageBed -f 0.8 -d -a $bed -b $bam' +
                             ' | grep -v \'^all\' > $out')
 
 

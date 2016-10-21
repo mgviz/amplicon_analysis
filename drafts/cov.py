@@ -6,6 +6,7 @@ import time
 import logging as log
 import pandas as pd
 import matplotlib
+
 matplotlib.use('Agg')  # non-interactive backend
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -14,6 +15,7 @@ from string import Template
 from subprocess import Popen, PIPE
 
 _DEF_COV_THRESHOLD = 100
+_DEF_FRACTION = 0.000000001
 _DATA_FOLDER = 'data'
 _SAMPLE_DATA = 'SampleData.csv'
 _SAMPLE_SELECTION = 'SampleSelection.csv'
@@ -28,7 +30,7 @@ _BED_FOLDER = 'beds'
 _MERGED_COV_FILE = 'all_samples.perbase.cov'
 
 # Required BEDtools v.2.19.0 or above!
-_BEDTOOLS_COVPERBASE_CMD = ('coverageBed -f 0.8 -d -a $bed -b $bam' +
+_BEDTOOLS_COVPERBASE_CMD = ('coverageBed -f $fraction -d -a $bed -b $bam' +
                             ' | grep -v \'^all\' > $out')
 
 
@@ -43,6 +45,9 @@ def _setup_argparse():
                         help='Project folder')
     parser.add_argument('-v', '--verbose', dest='verbosity',
                         help='increase output verbosity', action='store_true')
+    parser.add_argument('-f', '--fraction', dest='fraction',
+                        help='Minimum overlap required as a fraction of the '
+                             'region', default=_DEF_FRACTION, type=float)
     parser.add_argument('-t', '--cov_threshold', dest='cov_threshold',
                         help='Coverage threshold', default=_DEF_COV_THRESHOLD,
                         type=int)
@@ -82,6 +87,11 @@ def _get_options():
     # Checking if coverage threshold is a positive integer
     if (not isinstance(args.cov_threshold, int)) or args.cov_threshold < 0:
         raise IOError('Coverage threshold must be a positive integer.')
+
+    # Checking if fraction is a float between 0 and 1
+    if ((not isinstance(args.fraction, float)) or args.fraction < 0 or
+                args.fraction > 1):
+        raise IOError('Coverage threshold must be between 0 and 1')
 
     return args
 
@@ -190,7 +200,7 @@ def cov_plot(df, out_folder, cov_threshold=None, feats=None, samps=None):
             # Saving plot and clearing it
             figname = sample + '-' + feature + '.pbcov.png'
             fig.savefig(os.path.join(out_folder, figname))
-            #plt.clf()
+            # plt.clf()
             plt.close(fig)
 
 
@@ -283,8 +293,8 @@ def _create_folder(folder):
             raise IOError('Unable to create output folders. Check permissions.')
 
 
-def run_bedtools_get_cov(samples, bam_out_fpath, bed_out_fpath, cov_out_fpath,
-                         cmd):
+def run_bedtools_get_cov(samples, fraction, bam_out_fpath, bed_out_fpath,
+                         cov_out_fpath, cmd):
     """Runs a bedtools getCoverage command
     :param samples: names of the samples
     :param bam_out_fpath: path of the input BAM file
@@ -297,7 +307,7 @@ def run_bedtools_get_cov(samples, bam_out_fpath, bed_out_fpath, cov_out_fpath,
         bam = os.path.join(bam_out_fpath, sample + '.bam')
         bed = os.path.join(bed_out_fpath, sample + '.bed')
         out = os.path.join(cov_out_fpath, sample + '.pbcov')
-        cmd = template.substitute(bam=bam, bed=bed, out=out)
+        cmd = template.substitute(fraction=fraction, bed=bed, bam=bam, out=out)
         p = Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE)
         output = p.communicate()[1]
         if p.returncode != 0:
@@ -391,7 +401,7 @@ def main():
         wrong_regions = subselect.loc[subselect['amplicon_end'] -
                                       subselect['amplicon_start'] <= 0]
         if not wrong_regions.empty:
-            msg = 'Region end has to be higher than region start:\n' +\
+            msg = 'Region end has to be higher than region start:\n' + \
                   str(wrong_regions)
             raise ValueError(msg)
 
@@ -404,14 +414,14 @@ def main():
     # Running BEDtools
     log.info('Running BEDtools...')
     inds = map(lambda x: os.path.splitext(x)[0], bam_samples)
-    run_bedtools_get_cov(inds, out_folders['bam_folder'],
+    run_bedtools_get_cov(inds, options.fraction, out_folders['bam_folder'],
                          out_folders['bed_folder'], out_folders['cov_folder'],
                          _BEDTOOLS_COVPERBASE_CMD)
 
     # Creating coverage plots and getting stats
     log.info('Generating coverage plots...')
     cov_fnames = [f for f in os.listdir(out_folders['cov_folder']) if
-                 f.endswith('.pbcov')]
+                  f.endswith('.pbcov')]
     log.debug('Coverage files found: "' + str(cov_fnames) + '".')
     stats_all = pd.DataFrame()
     for cov_fname in cov_fnames:

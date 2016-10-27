@@ -15,7 +15,8 @@ from string import Template
 from subprocess import Popen, PIPE
 
 _DEF_COV_THRESHOLD = 100
-_DEF_FRACTION = 0.000000001
+_DEF_FRACTION_BED = 0.000000001
+_DEF_FRACTION_BAM = 0.000000001
 _DATA_FOLDER = 'data'
 _SAMPLE_DATA = 'SampleData.csv'
 _SAMPLE_SELECTION = 'SampleSelection.csv'
@@ -30,8 +31,8 @@ _BED_FOLDER = 'beds'
 _MERGED_COV_FILE = 'all_samples.perbase.cov'
 
 # Required BEDtools v.2.19.0 or above!
-_BEDTOOLS_COVPERBASE_CMD = ('coverageBed -f $fraction -d -a $bed -b $bam' +
-                            ' | grep -v \'^all\' > $out')
+_BEDTOOLS_COVPERBASE_CMD = ('coverageBed -f $fraction_bed -F $fraction_bam -d' +
+                            ' -a $bed -b $bam | grep -v \'^all\' > $out')
 
 
 def _setup_argparse():
@@ -45,9 +46,12 @@ def _setup_argparse():
                         help='Project folder')
     parser.add_argument('-v', '--verbose', dest='verbosity',
                         help='increase output verbosity', action='store_true')
-    parser.add_argument('-f', '--fraction', dest='fraction',
+    parser.add_argument('-f', '--fraction_bed', dest='fraction_bed',
                         help='Minimum overlap required as a fraction of the '
-                             'region', default=_DEF_FRACTION, type=float)
+                             'region', default=_DEF_FRACTION_BED, type=float)
+    parser.add_argument('-F', '--fraction_bam', dest='fraction_bam',
+                        help='Minimum overlap required as a fraction of the '
+                             'read', default=_DEF_FRACTION_BAM, type=float)
     parser.add_argument('-t', '--cov_threshold', dest='cov_threshold',
                         help='Coverage threshold', default=_DEF_COV_THRESHOLD,
                         type=int)
@@ -88,10 +92,15 @@ def _get_options():
     if (not isinstance(args.cov_threshold, int)) or args.cov_threshold < 0:
         raise IOError('Coverage threshold must be a positive integer.')
 
-    # Checking if fraction is a float between 0 and 1
-    if ((not isinstance(args.fraction, float)) or args.fraction < 0 or
-                args.fraction > 1):
-        raise IOError('Coverage threshold must be between 0 and 1')
+    # Checking if fraction of the region is a float between 0 and 1
+    if ((not isinstance(args.fraction_bed, float)) or args.fraction_bed < 0 or
+                args.fraction_bed > 1):
+        raise IOError('Region overlap threshold must be between 0 and 1')
+
+    # Checking if fraction of the read is a float between 0 and 1
+    if ((not isinstance(args.fraction_bam, float)) or args.fraction_bam < 0 or
+                args.fraction_bam > 1):
+        raise IOError('Read overlap threshold must be between 0 and 1')
 
     return args
 
@@ -293,8 +302,8 @@ def _create_folder(folder):
             raise IOError('Unable to create output folders. Check permissions.')
 
 
-def run_bedtools_get_cov(samples, fraction, bam_out_fpath, bed_out_fpath,
-                         cov_out_fpath, cmd):
+def run_bedtools_get_cov(samples, fraction_bed, fraction_bam, bam_out_fpath,
+                         bed_out_fpath, cov_out_fpath, cmd):
     """Runs a bedtools getCoverage command
     :param samples: names of the samples
     :param bam_out_fpath: path of the input BAM file
@@ -307,7 +316,9 @@ def run_bedtools_get_cov(samples, fraction, bam_out_fpath, bed_out_fpath,
         bam = os.path.join(bam_out_fpath, sample + '.bam')
         bed = os.path.join(bed_out_fpath, sample + '.bed')
         out = os.path.join(cov_out_fpath, sample + '.pbcov')
-        cmd = template.substitute(fraction=fraction, bed=bed, bam=bam, out=out)
+        cmd = template.substitute(fraction_bed=fraction_bed,
+                                  fraction_bam=fraction_bam, bed=bed,
+                                  bam=bam, out=out)
         p = Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE)
         output = p.communicate()[1]
         if p.returncode != 0:
@@ -414,9 +425,9 @@ def main():
     # Running BEDtools
     log.info('Running BEDtools...')
     inds = map(lambda x: os.path.splitext(x)[0], bam_samples)
-    run_bedtools_get_cov(inds, options.fraction, out_folders['bam_folder'],
-                         out_folders['bed_folder'], out_folders['cov_folder'],
-                         _BEDTOOLS_COVPERBASE_CMD)
+    run_bedtools_get_cov(inds, options.fraction_bed, options.fraction_bam,
+                         out_folders['bam_folder'], out_folders['bed_folder'],
+                         out_folders['cov_folder'], _BEDTOOLS_COVPERBASE_CMD)
 
     # Creating coverage plots and getting stats
     log.info('Generating coverage plots...')
